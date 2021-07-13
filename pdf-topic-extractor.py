@@ -15,7 +15,7 @@ def extract_file_content(input_path: str, output_dir: str) -> str:
     Returns the content as text and writes it to a file.
     May fail with UnicodeDecodeError when there is an unknown character in the file.
     """
-    content = textract.process(input_path, 'utf8').decode('utf8')
+    content = textract.process(input_path, 'utf8', method='pdfminer').decode('utf8')
     filename = os.path.basename(input_path)
     filename_without_ext = os.path.splitext(filename)[0]
     with open(os.path.join(output_dir, filename_without_ext) + '.txt', 'w') as file:
