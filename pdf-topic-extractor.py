@@ -1,5 +1,6 @@
 import textract
 import shutil
+import gensim
 from typing import Iterable, Tuple
 import sys
 from gensim.models import LdaModel
@@ -7,7 +8,8 @@ from gensim.corpora.textcorpus import TextDirectoryCorpus, TextCorpus
 import os
 
 
-NUMBER_OF_TOPICS = 10
+MAX_WORD_FREQUENCY = 0.9
+NUMBER_OF_TOPICS = 50
 
 
 def extract_file_content(input_path: str, output_dir: str) -> str:
@@ -38,10 +40,17 @@ def extract_folder_content(input_path: str, output_path: str) -> Iterable[Tuple[
                 except UnicodeDecodeError:
                     print('Unable to extract text from ' + full_path)
 
+
+def tokenize(text: str) -> Iterable[str]:
+    tokens = list(gensim.utils.tokenize(text, lowercase=True, deacc=True, errors='ignore'))
+    bigrams = [f'{t1} {t2}' for t1, t2 in zip(tokens[:-1], tokens[1:])]
+    return tokens + bigrams
+
+
 class TxtCorpus(TextCorpus):
     def __init__(self, path, dictionary):
         self._path = path
-        super().__init__(path, dictionary=dictionary)
+        super().__init__(path, dictionary=dictionary, tokenizer=tokenize)
 
     def getstream(self):
         with open(self._path, errors='ignore') as f:
@@ -49,16 +58,19 @@ class TxtCorpus(TextCorpus):
 
 
 if __name__ == '__main__':
-    input_folder = sys.argv[1]
+    training_folder = sys.argv[1]
+    input_folder = sys.argv[2]
     try:
         shutil.rmtree('output')
     except FileNotFoundError:
         pass
     os.mkdir('output')
-    contents_and_names = list(extract_folder_content(input_folder, 'output'))
-    corpus = TextDirectoryCorpus('output')
+    list(extract_folder_content(training_folder, 'output'))
+    corpus = TextDirectoryCorpus('output', tokenizer=tokenize)
+    corpus.dictionary.filter_extremes(no_above=MAX_WORD_FREQUENCY)
+    corpus = TextDirectoryCorpus('output', tokenizer=tokenize, dictionary=corpus.dictionary)
     model = LdaModel(corpus, num_topics=NUMBER_OF_TOPICS)
-    for name, content in contents_and_names:
+    for name, content in extract_folder_content(input_folder, 'output'):
         with open('output/topics.txt', 'a') as topics_file:
             topics_file.write(name + '\n')
             for topic_distr in model[TxtCorpus(name, corpus.dictionary)]:
